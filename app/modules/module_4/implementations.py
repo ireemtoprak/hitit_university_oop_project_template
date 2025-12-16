@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from app.modules.module_4.base import Club
 
 
@@ -75,7 +76,7 @@ from datetime import datetime
 
 @dataclass
 class ClubEvent:
-    # Etkinlik bilgilerini tutar
+    # Etkinlik bilgileri
     event_id: int
     club_name: str
     title: str
