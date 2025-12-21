@@ -14,6 +14,7 @@ from app.modules.module_4.implementations import (
 
 
 def run_demo() -> None:
+    # Kulüp ve etkinlik işlemlerinin RAM üzerinde doğru çalıştığını göstermek için örnek akışı çalıştırır
     club_repo = InMemoryClubRepository()
     event_repo = InMemoryEventRepository()
     service = ClubService(club_repo, event_repo)
@@ -74,6 +75,7 @@ from app.modules.module_4.repository import FileClubRepository, FileEventReposit
 
 
 def run_demo_file_repo() -> None:
+    # Kulüp ve etkinlik verilerinin JSON dosyaya yazılıp geri okunabildiğini test eder
     club_repo = FileClubRepository("data/module_4/clubs.json")
     event_repo = FileEventRepository("data/module_4/events.json")
 
@@ -116,7 +118,7 @@ def run_demo_file_repo() -> None:
     print("\n--- Mühendislik Spor Etkinlikleri (File Repo) ---")
     for ev in events:
         print(ev)
-
-
+        
+# Bu dosya doğrudan çalıştırıldığında dosya tabanlı demo akışını başlatır
 if __name__ == "__main__":
     run_demo_file_repo()

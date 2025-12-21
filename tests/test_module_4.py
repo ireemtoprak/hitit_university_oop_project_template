@@ -14,6 +14,7 @@ from app.modules.module_4.implementations import (
 
 
 def test_get_info_type_yazar():
+    # get_info çıktısında temel alanların ve doğru club_type bilgisinin yazdığını doğrular
     c = SportClub("Test Spor", "açıklama", "Futbol", 10)
     info = c.get_info()
 
@@ -26,6 +27,7 @@ def test_get_info_type_yazar():
 
 
 def test_sportclub_kapasite_asamaz():
+    # SportClub'ın max_members kapasitesini aşan üye eklemeyi engellediğini test eder
     c = SportClub("Kapasite", "deneme", "Basketbol", 5)
 
     c.add_member(6)  # kapasiteyi aşarsa eklememeli
@@ -39,6 +41,7 @@ def test_sportclub_kapasite_asamaz():
 
 
 def test_remove_member_sifirin_altina_inmez():
+    # Üye çıkarma işleminin member_count değerini 0'ın altına düşürmediğini kontrol eder
     c = MusicClub("Müzik", "deneme", 5, False)
 
     c.add_member(2)
@@ -50,6 +53,7 @@ def test_remove_member_sifirin_altina_inmez():
 
 
 def test_club_repo_add_get_search():
+    # InMemoryClubRepository'nin ekleme, isimle bulma ve arama fonksiyonlarının doğru çalıştığını test eder
     repo = InMemoryClubRepository()
 
     c1 = ScienceClub("Bilim", "projeler", 2, True)
@@ -68,6 +72,7 @@ def test_club_repo_add_get_search():
 
 
 def test_service_add_remove_member_true_false():
+    # ClubService'in kulüp yokken False, kulüp varken True dönerek üye ekleme/çıkarma yaptığını doğrular
     club_repo = InMemoryClubRepository()
     event_repo = InMemoryEventRepository()
     service = ClubService(club_repo, event_repo)
@@ -88,6 +93,7 @@ def test_service_add_remove_member_true_false():
 
 
 def test_service_plan_event_kulup_yoksa_false():
+    # Kulüp bulunamazsa plan_event çağrısının False döndürdüğünü test eder
     club_repo = InMemoryClubRepository()
     event_repo = InMemoryEventRepository()
     service = ClubService(club_repo, event_repo)
@@ -106,6 +112,7 @@ def test_service_plan_event_kulup_yoksa_false():
 
 
 def test_service_plan_event_quota_gecersizse_false():
+    # Kontenjan geçersizse (0 veya negatif) plan_event çağrısının False döndürdüğünü test eder
     club_repo = InMemoryClubRepository()
     event_repo = InMemoryEventRepository()
     service = ClubService(club_repo, event_repo)
@@ -127,6 +134,7 @@ def test_service_plan_event_quota_gecersizse_false():
 
 
 def test_service_plan_event_olunca_listede_gozukur_ve_id_alir():
+    # Etkinlik planlanınca listede göründüğünü ve repo tarafından event_id verildiğini doğrular
     club_repo = InMemoryClubRepository()
     event_repo = InMemoryEventRepository()
     service = ClubService(club_repo, event_repo)
@@ -156,6 +164,7 @@ def test_service_plan_event_olunca_listede_gozukur_ve_id_alir():
 
 
 def test_service_search_clubs():
+    # ClubService.search_clubs aramasının küçük/büyük harf fark etmeden doğru kulübü bulduğunu test eder
     club_repo = InMemoryClubRepository()
     event_repo = InMemoryEventRepository()
     service = ClubService(club_repo, event_repo)
@@ -170,6 +179,7 @@ def test_service_search_clubs():
 
 
 def test_static_is_valid_quota():
+    # ClubService.is_valid_quota statik metodunun pozitif/değerleri doğru değerlendirdiğini test eder
     assert ClubService.is_valid_quota(1) is True
     assert ClubService.is_valid_quota(0) is False
     assert ClubService.is_valid_quota(-5) is False

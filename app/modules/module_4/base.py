@@ -15,21 +15,21 @@ class Club(ABC):
 
     @abstractmethod
     def add_member(self, count: int) -> None:
-        """Kulübe üye ekleme (subclass override edecek)."""
+        """Kulübe üye ekleme (subclass override edecek)"""
         pass
 
     @abstractmethod
     def remove_member(self, count: int) -> None:
-        """Kulüpten üye çıkarma davranışı (subclass override edecek)."""
+        """Kulüpten üye çıkarma davranışı (subclass override edecek)"""
         pass
 
     @abstractmethod
     def club_type(self) -> str:
-        """Kulüp türünü döndürür (SportClub, MusicClub, ScienceClub/ArtClub gibi)."""
+        """Kulüp türünü döndürür (SportClub, MusicClub, ScienceClub/ArtClub gibi)"""
         pass
 
     def get_info(self) -> str:
-        """Testlerde kontrol edilecek bilgi metnini döndürür."""
+        """Testlerde kontrol edilecek bilgi metnini döndürür"""
         return (
             f"name: {self.name}\n"
             f"member_count: {self.member_count}\n"
