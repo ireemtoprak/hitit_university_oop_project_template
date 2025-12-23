@@ -1,295 +1,438 @@
 # app/modules/module_4/repository.py
 
 from __future__ import annotations
+
+import json
+from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Iterable
+from pathlib import Path
+from typing import Any
+
+from app.modules.module_4.base import Club
+from app.modules.module_4.implementations import ClubEvent, SportClub, MusicClub, ScienceClub
 
 
-class InMemoryClubRepository:
+# Kulüp repo sözleşmesini tanımlayan abstract sınıf.
+class ClubRepository(ABC):
+    # Kulübü kaydetmeyi zorunlu kılar.
+    @abstractmethod
+    def add_club(self, club: Club) -> Club:
+        pass
 
+    # Tüm kulüpleri listelemeyi zorunlu kılar.
+    @abstractmethod
+    def list_all(self) -> list[Club]:
+        pass
+
+    # Ada göre kulüp bulmayı zorunlu kılar.
+    @abstractmethod
+    def get_by_name(self, name: str) -> Club | None:
+        pass
+
+    # ID'ye göre kulüp bulmayı zorunlu kılar.
+    @abstractmethod
+    def get_by_id(self, club_id: int) -> Club | None:
+        pass
+
+    # Repo için metin normalize eder.
+    @staticmethod
+    def normalize_name(name: str) -> str:
+        return (name or "").strip()
+
+    # Boş repo üretir.
+    @classmethod
+    def empty(cls) -> "ClubRepository":
+        raise NotImplementedError("Somut repo bu metodu uygulamalı.")
+
+
+# Etkinlik repo sözleşmesini tanımlayan abstract sınıf.
+class EventRepository(ABC):
+    # Etkinlik kaydetmeyi zorunlu kılar.
+    @abstractmethod
+    def add_event(self, event: ClubEvent) -> ClubEvent:
+        pass
+
+    # Tüm etkinlikleri listelemeyi zorunlu kılar.
+    @abstractmethod
+    def list_all(self) -> list[ClubEvent]:
+        pass
+
+    # Kulübe göre etkinlik filtrelemeyi zorunlu kılar.
+    @abstractmethod
+    def list_by_club(self, club_id: int) -> list[ClubEvent]:
+        pass
+
+    # Tarih aralığına göre filtrelemeyi zorunlu kılar.
+    @abstractmethod
+    def list_by_date_range(self, start: datetime, end: datetime) -> list[ClubEvent]:
+        pass
+
+    # Etkinlik türüne göre filtrelemeyi zorunlu kılar.
+    @abstractmethod
+    def list_by_type(self, event_type: str) -> list[ClubEvent]:
+        pass
+
+    # Etkinliği id ile silmeyi zorunlu kılar.
+    @abstractmethod
+    def remove_by_id(self, event_id: int) -> bool:
+        pass
+
+    # Event type normalize eder.
+    @staticmethod
+    def normalize_type(event_type: str) -> str:
+        return (event_type or "").strip().lower()
+
+    # Boş repo üretir.
+    @classmethod
+    def empty(cls) -> "EventRepository":
+        raise NotImplementedError("Somut repo bu metodu uygulamalı.")
+
+
+# RAM üzerinde kulüpleri dict ile tutan repository.
+class InMemoryClubRepository(ClubRepository):
+    # Boş in-memory repo oluşturur.
     def __init__(self) -> None:
-        # Kulüpleri isimle hızlı bulmak için RAM’de sözlük olarak saklar
-        self._clubs_by_name: Dict[str, Any] = {}
+        self.__clubs_by_id: dict[int, Club] = {}
+        self.__id_by_name: dict[str, int] = {}
+        self.__next_id: int = 1
 
-    def add_club(self, club: Any) -> None:
-        # Kulübü ekler; boş/isim yoksa veya aynı isim varsa hata verir
-        if club is None or getattr(club, "name", None) is None:
-            raise ValueError("Kulüp boş olamaz.")
-
-        if club.name in self._clubs_by_name:
+    # Kulübü kaydeder ve id atar.
+    def add_club(self, club: Club) -> Club:
+        key = self.normalize_name(club.name)
+        if key == "":
+            raise ValueError("Kulüp adı boş olamaz.")
+        if key in self.__id_by_name:
             raise ValueError("Bu isimde kulüp zaten var.")
+        club_id = self.__next_id
+        self.__next_id += 1
+        club._set_id_internal(club_id)
+        self.__clubs_by_id[club_id] = club
+        self.__id_by_name[key] = club_id
+        return club
 
-        self._clubs_by_name[club.name] = club
+    # Tüm kulüpleri listeler.
+    def list_all(self) -> list[Club]:
+        return list(self.__clubs_by_id.values())
 
-    def list_all(self) -> List[Any]:
-        # RAM’deki tüm kulüp nesnelerini liste olarak döndürür
-        return list(self._clubs_by_name.values())
+    # Ada göre kulüp bulur.
+    def get_by_name(self, name: str) -> Club | None:
+        key = self.normalize_name(name)
+        if key == "":
+            return None
+        cid = self.__id_by_name.get(key)
+        return self.__clubs_by_id.get(cid) if cid is not None else None
 
-    def get_by_name(self, club_name: str) -> Optional[Any]:
-        # Kulüp adından tek bir kulübü bulur; yoksa None döndürür
-        return self._clubs_by_name.get(club_name)
+    # ID'ye göre kulüp bulur.
+    def get_by_id(self, club_id: int) -> Club | None:
+        if not Club.is_positive_int(club_id):
+            return None
+        return self.__clubs_by_id.get(club_id)
 
-    def search(self, keyword: str) -> List[Any]:
-        # Anahtar kelime kulüp adının içinde geçiyorsa eşleşenleri döndürür
-        if keyword is None:
-            return []
-        k = keyword.strip().lower()
-        if not k:
+    # Kulübü günceller (üye sayısı gibi değişimler için).
+    def update_club(self, club: Club) -> None:
+        if club.id is None:
+            raise ValueError("Kulübün id'si yok.")
+        if club.id not in self.__clubs_by_id:
+            raise ValueError("Kulüp bulunamadı.")
+        self.__clubs_by_id[club.id] = club
+        self.__id_by_name[self.normalize_name(club.name)] = club.id
+
+    # İsim içinde keyword geçen kulüpleri döndürür.
+    def search(self, keyword: str) -> list[Club]:
+        k = self.normalize_name(keyword).lower()
+        if k == "":
             return []
         return [c for c in self.list_all() if k in c.name.lower()]
 
+    # Kulüpleri tür adına göre filtreler.
+    def filter_by_type(self, club_type: str) -> list[Club]:
+        t = self.normalize_name(club_type)
+        if t == "":
+            return []
+        return [c for c in self.list_all() if c.club_type() == t]
 
-class InMemoryEventRepository:
+    # Kulüpleri minimum üye sayısına göre filtreler.
+    def filter_by_min_members(self, min_members: int) -> list[Club]:
+        if not isinstance(min_members, int) or min_members < 0:
+            return []
+        return [c for c in self.list_all() if c.member_count >= min_members]
 
+    # Boş repo üretir.
+    @classmethod
+    def empty(cls) -> "InMemoryClubRepository":
+        return cls()
+
+    # Kulüp adı doğrulaması yapar.
+    @staticmethod
+    def is_valid_club_name(name: str) -> bool:
+        return Club.is_valid_text(name, min_len=2, max_len=60)
+
+
+# RAM üzerinde etkinlikleri dict ile tutan repository.
+class InMemoryEventRepository(EventRepository):
+    # Boş in-memory event repo oluşturur.
     def __init__(self) -> None:
-        # Etkinlikleri RAM’de listede tutar ve otomatik ID sayacı başlatır
-        self._events: List[Any] = []
-        self._next_id: int = 1
+        self.__events_by_id: dict[int, ClubEvent] = {}
+        self.__ids_by_club: dict[int, list[int]] = {}
+        self.__next_id: int = 1
 
-    def add_event(self, event: Any) -> Any:
-        # Etkinliği ekler; ID yoksa sıradaki ID’yi verip kaydeder
-        if getattr(event, "event_id", None) in (None, 0):
-            event.event_id = self._next_id
-            self._next_id += 1
-        self._events.append(event)
+    # Etkinliği kaydeder ve id atar.
+    def add_event(self, event: ClubEvent) -> ClubEvent:
+        if event.event_id == 0:
+            event.event_id = self.__next_id
+            self.__next_id += 1
+        self.__events_by_id[event.event_id] = event
+        self.__ids_by_club.setdefault(event.club_id, []).append(event.event_id)
         return event
 
-    def list_all(self) -> List[Any]:
-        # RAM’deki tüm etkinlikleri liste olarak döndürür
-        return list(self._events)
+    # Tüm etkinlikleri listeler.
+    def list_all(self) -> list[ClubEvent]:
+        return list(self.__events_by_id.values())
 
-    def list_by_club(self, club_name: str) -> List[Any]:
-        # Verilen kulüp adına ait etkinlikleri filtreleyip döndürür
-        if club_name is None:
+    # Kulüp id’ye göre etkinlikleri listeler.
+    def list_by_club(self, club_id: int) -> list[ClubEvent]:
+        if not Club.is_positive_int(club_id):
             return []
-        return [e for e in self._events if e.club_name == club_name]
+        ids = self.__ids_by_club.get(club_id, [])
+        return [self.__events_by_id[i] for i in ids if i in self.__events_by_id]
 
-    @staticmethod
-    def is_future_date(date: datetime) -> bool:
-        # Verilen tarihin şu andan ileri bir zaman olup olmadığını kontrol eder
-        if date is None:
+    # Tarih aralığına göre etkinlikleri filtreler.
+    def list_by_date_range(self, start: datetime, end: datetime) -> list[ClubEvent]:
+        if not isinstance(start, datetime) or not isinstance(end, datetime):
+            return []
+        return [e for e in self.list_all() if start <= e.date <= end]
+
+    # Etkinlik türüne göre etkinlikleri filtreler.
+    def list_by_type(self, event_type: str) -> list[ClubEvent]:
+        t = self.normalize_type(event_type)
+        if t == "":
+            return []
+        return [e for e in self.list_all() if e.event_type.strip().lower() == t]
+
+    # Event id’ye göre etkinliği siler.
+    def remove_by_id(self, event_id: int) -> bool:
+        if not Club.is_positive_int(event_id):
             return False
-        return date > datetime.now()
+        ev = self.__events_by_id.pop(event_id, None)
+        if ev is None:
+            return False
+        if ev.club_id in self.__ids_by_club:
+            self.__ids_by_club[ev.club_id] = [i for i in self.__ids_by_club[ev.club_id] if i != event_id]
+        return True
 
+    # Boş repo üretir.
     @classmethod
-    def create_with_seed(cls, seed_events: Iterable[Any]) -> "InMemoryEventRepository":
-        # Başlangıç etkinlikleriyle dolu bir repository üretir (test/demo için)
-        repo = cls()
-        for ev in seed_events:
-            repo.add_event(ev)
-        return repo
-    
-# Verileri RAM yerine dosyada saklamak için
-# Böylece program kapanıp açılsa bile kayıtlar durur.
+    def empty(cls) -> "InMemoryEventRepository":
+        return cls()
 
-
-import json
-from dataclasses import asdict, is_dataclass
-from datetime import datetime
-from pathlib import Path
-from typing import Any, Dict, List, Optional
-
-
-class JsonStorageHelper:
-    """
-    Öğrenci işi basit JSON yardımcı sınıf.
-    Repository'lerde tekrar eden okuma/yazma işini azaltmak için yaptım.
-    """
-
+    # Gelecek tarih kontrolü yapar.
     @staticmethod
-    def ensure_parent_dir(file_path: Path) -> None:
-        # Dosya yolunun klasörü yoksa oluşturur, varsa sorun çıkarmaz
-        file_path.parent.mkdir(parents=True, exist_ok=True)
+    def is_future(date: datetime) -> bool:
+        return isinstance(date, datetime) and date > datetime.now()
 
+
+# JSON dosya işlemlerini tek yerde toplamak için yardımcı sınıf.
+class JsonStorage:
+    # Dosya yoksa default döndürerek json okur.
     @staticmethod
-    def read_json(file_path: Path, default: Any) -> Any:
-        # JSON dosyasını okur; dosya yok/boş/bozuksa default döndürür
-        if not file_path.exists():
+    def read(path: Path, default: Any) -> Any:
+        if not path.exists():
             return default
-
-        # Boş dosya olursa hata çıkmasın diye try/except.
         try:
-            text = file_path.read_text(encoding="utf-8")
-            if not text.strip():
+            raw = path.read_text(encoding="utf-8")
+            if not raw.strip():
                 return default
-            return json.loads(text)
+            return json.loads(raw)
         except Exception:
             return default
 
+    # Json veriyi dosyaya yazar ve klasörü garanti eder.
     @staticmethod
-    def write_json(file_path: Path, data: Any) -> None:
-        # Veriyi JSON’a çevirip dosyaya yazar (Türkçe bozulmasın diye UTF-8)
-        JsonStorageHelper.ensure_parent_dir(file_path)
-        file_path.write_text(
-            json.dumps(data, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
+    def write(path: Path, data: Any) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    # ISO string'i datetime'a çevirir.
+    @staticmethod
+    def parse_dt(value: Any) -> datetime:
+        try:
+            if isinstance(value, str) and value.strip():
+                return datetime.fromisoformat(value)
+        except Exception:
+            pass
+        return datetime.now()
+
+    # Path üretir.
+    @classmethod
+    def from_str(cls, p: str) -> Path:
+        return Path(p)
 
 
-class FileClubRepository:
-    """
-    Kulüp verilerini JSON dosyada saklayan repository.
-    Veriler program kapansa bile kaybolmasın diye
-    """
-
+# JSON dosyada kulüp saklayan repository.
+class FileClubRepository(ClubRepository):
+    # Kulüpleri saklayacağı json dosya yoluyla repo'yu kurar.
     def __init__(self, file_path: str = "data/module_4/clubs.json") -> None:
-        # Kulüp kayıtlarının tutulacağı JSON dosya yolunu ayarlar
-        self._path = Path(file_path)
+        self.__path: Path = Path(file_path)
 
-    def _club_to_dict(self, club: Any) -> Dict[str, Any]:
-        # Kulüp nesnesini JSON'a uygun dict'e çevirmek için
-        tip = club.__class__.__name__
+    # Kulüpleri json'dan okur (dict listesi).
+    def _read_all(self) -> list[dict[str, Any]]:
+        return JsonStorage.read(self.__path, default=[])
 
-        base = {
-            "type": tip,
+    # Kulüpleri json'a yazar (dict listesi).
+    def _write_all(self, items: list[dict[str, Any]]) -> None:
+        JsonStorage.write(self.__path, items)
+
+    # Bir sonraki kulüp id'sini üretir.
+    def _next_id(self, items: list[dict[str, Any]]) -> int:
+        max_id = 0
+        for d in items:
+            try:
+                max_id = max(max_id, int(d.get("id", 0)))
+            except Exception:
+                continue
+        return max_id + 1
+
+    # Kulüp nesnesini json'a uygun dict'e çevirir.
+    def _club_to_dict(self, club: Club) -> dict[str, Any]:
+        d: dict[str, Any] = {
+            "id": club.id or 0,
+            "type": club.club_type(),
             "name": club.name,
             "description": club.description,
             "member_count": club.member_count,
-            "created_at": club.created_at.isoformat() if hasattr(club, "created_at") else datetime.now().isoformat(),
+            "created_at": club.created_at.isoformat(),
         }
+        if isinstance(club, SportClub):
+            d["sport_name"] = club.sport_name
+            d["max_members"] = club.max_members
+        if isinstance(club, MusicClub):
+            d["instrument_count"] = club.instrument_count
+            d["has_studio"] = club.has_studio
+        if isinstance(club, ScienceClub):
+            d["lab_count"] = club.lab_count
+            d["project_based"] = club.project_based
+        return d
 
-        # Type'a göre ek alanlar
-        if hasattr(club, "sport_name"):
-            base["sport_name"] = club.sport_name
-        if hasattr(club, "max_members"):
-            base["max_members"] = club.max_members
-
-        if hasattr(club, "instrument_count"):
-            base["instrument_count"] = club.instrument_count
-        if hasattr(club, "has_studio"):
-            base["has_studio"] = club.has_studio
-
-        if hasattr(club, "lab_count"):
-            base["lab_count"] = club.lab_count
-        if hasattr(club, "project_based"):
-            base["project_based"] = club.project_based
-
-        return base
-
-    def _dict_to_club(self, data: Dict[str, Any], factory: Any) -> Any:
-       # Dosyadan gelen dict’i type bilgisine göre doğru kulüp nesnesine çevirir.
-        tip = data.get("type")
-        name = data.get("name")
-        description = data.get("description")
-
-        # Base alanlar kontrol
-        if not tip or not name or description is None:
+    # Dict veriden doğru subclass kulübü üretir.
+    def _dict_to_club(self, data: dict[str, Any]) -> Club | None:
+        t = str(data.get("type", "")).strip()
+        name = str(data.get("name", "")).strip()
+        desc = str(data.get("description", "")).strip()
+        if t == "" or name == "" or desc == "":
             return None
 
-        # Type'a göre nesne oluştur
-        if tip == "SportClub":
-            obj = factory.SportClub(
-                name,
-                description,
-                data.get("sport_name", ""),
-                int(data.get("max_members", 0)),
-            )
-        elif tip == "MusicClub":
-            obj = factory.MusicClub(
-                name,
-                description,
-                int(data.get("instrument_count", 0)),
-                bool(data.get("has_studio", False)),
-            )
-        elif tip == "ScienceClub":
-            obj = factory.ScienceClub(
-                name,
-                description,
-                int(data.get("lab_count", 0)),
-                bool(data.get("project_based", False)),
-            )
+        if t == "SportClub":
+            obj = SportClub(name, desc, str(data.get("sport_name", "Basketbol")), int(data.get("max_members", 30)))
+        elif t == "MusicClub":
+            obj = MusicClub(name, desc, int(data.get("instrument_count", 0)), bool(data.get("has_studio", False)))
+        elif t == "ScienceClub":
+            obj = ScienceClub(name, desc, int(data.get("lab_count", 0)), bool(data.get("project_based", False)))
         else:
-            # Bilinmeyen tip -> atla
             return None
 
-        # Kayıtlı member_count / created_at geri yükle
-        try:
-            obj.member_count = int(data.get("member_count", 0))
-        except Exception:
-            obj.member_count = 0
+        club_id = int(data.get("id", 0)) if int(data.get("id", 0)) > 0 else None
+        member_count = int(data.get("member_count", 0))
+        created_at = JsonStorage.parse_dt(data.get("created_at"))
+        return Club.hydrate_base(obj, club_id=club_id, member_count=member_count, created_at=created_at)
 
-        try:
-            created_str = data.get("created_at")
-            obj.created_at = datetime.fromisoformat(created_str) if created_str else datetime.now()
-        except Exception:
-            obj.created_at = datetime.now()
+    # Kulübü kaydeder ve id atar (json'a yazar).
+    def add_club(self, club: Club) -> Club:
+        items = self._read_all()
+        if any(str(d.get("name", "")).strip() == club.name for d in items):
+            raise ValueError("Bu isimde kulüp zaten var.")
+        if club.id is None:
+            club._set_id_internal(self._next_id(items))
+        items.append(self._club_to_dict(club))
+        self._write_all(items)
+        return club
 
-        return obj
-
-    def _read_all_dicts(self) -> List[Dict[str, Any]]:
-        # Kulüp JSON dosyasındaki tüm kayıtları dict listesi olarak okur
-        return JsonStorageHelper.read_json(self._path, default=[])
-
-    def _write_all_dicts(self, clubs_list: List[Dict[str, Any]]) -> None:
-        # Kulüp dict listesini JSON dosyasına topluca yazar
-        JsonStorageHelper.write_json(self._path, clubs_list)
-
-    def add_club(self, club: Any) -> None:
-        # Aynı isimli kulüp eklenmesin
-        all_data = self._read_all_dicts()
-        if any(x.get("name") == club.name for x in all_data):
-            raise ValueError("Bu isimde kulüp zaten var (file repo).")
-
-        all_data.append(self._club_to_dict(club))
-        self._write_all_dicts(all_data)
-
-    def list_all(self, factory: Any) -> List[Any]:
-        # factory: implementations modülü
-        out: List[Any] = []
-        for d in self._read_all_dicts():
-            club_obj = self._dict_to_club(d, factory)
-            if club_obj is not None:
-                out.append(club_obj)
+    # Tüm kulüpleri listeler (json'dan okur).
+    def list_all(self) -> list[Club]:
+        out: list[Club] = []
+        for d in self._read_all():
+            c = self._dict_to_club(d)
+            if c is not None:
+                out.append(c)
         return out
 
-    def get_by_name(self, club_name: str, factory: Any) -> Optional[Any]:
-        # Dosyada ada göre kulübü bulup nesne döndürür; yoksa None
-        for d in self._read_all_dicts():
-            if d.get("name") == club_name:
-                return self._dict_to_club(d, factory)
+    # Ada göre kulüp bulur (json üstünden).
+    def get_by_name(self, name: str) -> Club | None:
+        key = self.normalize_name(name)
+        if key == "":
+            return None
+        for d in self._read_all():
+            if str(d.get("name", "")).strip() == key:
+                return self._dict_to_club(d)
         return None
 
-    def update_club(self, club: Any) -> None:
-        # Üye sayısı değişince vs. kaydetmek için.
-        all_data = self._read_all_dicts()
-        for i, d in enumerate(all_data):
-            if d.get("name") == club.name:
-                all_data[i] = self._club_to_dict(club)
-                self._write_all_dicts(all_data)
+    # ID’ye göre kulüp bulur (json üstünden).
+    def get_by_id(self, club_id: int) -> Club | None:
+        if not Club.is_positive_int(club_id):
+            return None
+        for d in self._read_all():
+            if int(d.get("id", 0)) == club_id:
+                return self._dict_to_club(d)
+        return None
+
+    # Kulübü günceller (json'da id eşleşeni değiştirir).
+    def update_club(self, club: Club) -> None:
+        if club.id is None:
+            raise ValueError("Kulübün id'si yok.")
+        items = self._read_all()
+        for i, d in enumerate(items):
+            if int(d.get("id", 0)) == club.id:
+                items[i] = self._club_to_dict(club)
+                self._write_all(items)
                 return
-        raise ValueError("Güncellenecek kulüp bulunamadı (file repo).")
+        raise ValueError("Güncellenecek kulüp bulunamadı.")
 
-    def search(self, keyword: str, factory: Any) -> List[Any]:
-        # Anahtar kelimeye göre kulüp adlarında arama yapıp eşleşenleri döndürür
-        k = (keyword or "").strip().lower()
-        if not k:
+    # İsim içinde keyword geçen kulüpleri listeler.
+    def search(self, keyword: str) -> list[Club]:
+        k = self.normalize_name(keyword).lower()
+        if k == "":
             return []
-        result: List[Any] = []
-        for club in self.list_all(factory):
-            if k in club.name.lower():
-                result.append(club)
-        return result
+        return [c for c in self.list_all() if k in c.name.lower()]
+
+    # Tür adına göre kulüpleri filtreler.
+    def filter_by_type(self, club_type: str) -> list[Club]:
+        t = self.normalize_name(club_type)
+        if t == "":
+            return []
+        return [c for c in self.list_all() if c.club_type() == t]
+
+    # Minimum üye sayısına göre kulüpleri filtreler.
+    def filter_by_min_members(self, min_members: int) -> list[Club]:
+        if not isinstance(min_members, int) or min_members < 0:
+            return []
+        return [c for c in self.list_all() if c.member_count >= min_members]
+
+    # Boş repo üretir.
+    @classmethod
+    def empty(cls) -> "FileClubRepository":
+        return cls()
+
+    # Dosya yolu geçerli mi kontrol eder.
+    @staticmethod
+    def is_valid_path(file_path: str) -> bool:
+        return isinstance(file_path, str) and file_path.strip() != ""
 
 
-class FileEventRepository:
-    """
-    Etkinlik verilerini JSON dosyada saklayan repository.
-    Program kapansa bile etkinlikler kaybolmaz.
-    """
+# JSON dosyada etkinlik saklayan repository.
+class FileEventRepository(EventRepository):
+    # Etkinlikleri saklayacağı json dosya yoluyla repo'yu kurar.
     def __init__(self, file_path: str = "data/module_4/events.json") -> None:
-        # Anahtar kelimeye göre kulüp adlarında arama yapıp eşleşenleri döndürür
-        self._path = Path(file_path)
+        self.__path: Path = Path(file_path)
 
-    def _read_all(self) -> List[Dict[str, Any]]:
-        # Event JSON dosyasındaki tüm kayıtları dict listesi olarak okur
-        return JsonStorageHelper.read_json(self._path, default=[])
+    # Eventleri json'dan okur (dict listesi).
+    def _read_all(self) -> list[dict[str, Any]]:
+        return JsonStorage.read(self.__path, default=[])
 
-    def _write_all(self, items: List[Dict[str, Any]]) -> None:
-        # Event dict listesini JSON dosyasına topluca yazar 
-        JsonStorageHelper.write_json(self._path, items)
+    # Eventleri json'a yazar (dict listesi).
+    def _write_all(self, items: list[dict[str, Any]]) -> None:
+        JsonStorage.write(self.__path, items)
 
-    def _next_id(self, items: List[Dict[str, Any]]) -> int:
-        # Dosyadaki en büyük event_id’yi bulup bir sonrakini üretir.
+    # Bir sonraki event id'sini üretir.
+    def _next_id(self, items: list[dict[str, Any]]) -> int:
         max_id = 0
         for d in items:
             try:
@@ -298,235 +441,60 @@ class FileEventRepository:
                 continue
         return max_id + 1
 
-    def _event_to_dict(self, event: Any) -> Dict[str, Any]:
-        # dataclass ise asdict ile daha kolay
-        if is_dataclass(event):
-            d = asdict(event)
-        else:
-            d = {
-                "event_id": getattr(event, "event_id", 0),
-                "club_name": getattr(event, "club_name", ""),
-                "title": getattr(event, "title", ""),
-                "date": getattr(event, "date", datetime.now()),
-                "location": getattr(event, "location", ""),
-                "quota": getattr(event, "quota", 0),
-                "event_type": getattr(event, "event_type", "General"),
-            }
-
-        # date datetime ise isoformat'a çevir
-        if isinstance(d.get("date"), datetime):
-            d["date"] = d["date"].isoformat()
-
-        return d
-
-    def _dict_to_event(self, data: Dict[str, Any], event_class: Any) -> Any:
-        # event_class: implementations içindeki ClubEvent
-        try:
-            date_str = data.get("date")
-            dt = datetime.fromisoformat(date_str) if date_str else datetime.now()
-        except Exception:
-            dt = datetime.now()
-
-        return event_class(
-            event_id=int(data.get("event_id", 0)),
-            club_name=str(data.get("club_name", "")),
-            title=str(data.get("title", "")),
-            date=dt,
-            location=str(data.get("location", "")),
-            quota=int(data.get("quota", 0)),
-            event_type=str(data.get("event_type", "General")),
-        )
-
-    def add_event(self, event: Any) -> Any:
-        # Event’i dosyaya ekler; ID yoksa otomatik ID atar ve kaydeder
+    # Etkinliği kaydeder ve id atar (json'a yazar).
+    def add_event(self, event: ClubEvent) -> ClubEvent:
         items = self._read_all()
-
-        if getattr(event, "event_id", 0) in (0, None):
-            new_id = self._next_id(items)
-            event.event_id = new_id
-
-        items.append(self._event_to_dict(event))
+        if event.event_id == 0:
+            event.event_id = self._next_id(items)
+        items.append(event.to_dict())
         self._write_all(items)
         return event
 
-    def list_by_club(self, club_name: str, event_class: Any) -> List[Any]:
-        # Belirli kulübün event’lerini dosyadan okuyup nesne listesi döndürür
-        out: List[Any] = []
+    # Tüm etkinlikleri listeler (json'dan okur).
+    def list_all(self) -> list[ClubEvent]:
+        return [ClubEvent.from_dict(d) for d in self._read_all()]
+
+    # Kulüp id’ye göre etkinlikleri listeler.
+    def list_by_club(self, club_id: int) -> list[ClubEvent]:
+        if not Club.is_positive_int(club_id):
+            return []
+        out: list[ClubEvent] = []
         for d in self._read_all():
-            if d.get("club_name") == club_name:
-                out.append(self._dict_to_event(d, event_class))
+            if int(d.get("club_id", 0)) == club_id:
+                out.append(ClubEvent.from_dict(d))
         return out
 
-    def list_all(self, event_class: Any) -> List[Any]:
-        # Dosyadaki tüm event’leri nesne listesi olarak döndürür
-        return [self._dict_to_event(d, event_class) for d in self._read_all()]
-    
-   
+    # Tarih aralığına göre etkinlikleri filtreler.
+    def list_by_date_range(self, start: datetime, end: datetime) -> list[ClubEvent]:
+        if not isinstance(start, datetime) or not isinstance(end, datetime):
+            return []
+        return [e for e in self.list_all() if start <= e.date <= end]
 
-from datetime import datetime
+    # Etkinlik türüne göre etkinlikleri filtreler.
+    def list_by_type(self, event_type: str) -> list[ClubEvent]:
+        t = self.normalize_type(event_type)
+        if t == "":
+            return []
+        return [e for e in self.list_all() if e.event_type.strip().lower() == t]
 
-
-def _im_club_get_by_id(self, club_id: int):
-    # Kulübü eklenme sırasını ID kabul ederek ID ile döndürür
-    if not isinstance(club_id, int) or club_id <= 0:
-        return None
-    clubs = self.list_all()  # eklenme sırasını dict korur
-    idx = club_id - 1
-    if 0 <= idx < len(clubs):
-        return clubs[idx]
-    return None
-
-
-def _im_club_filter_by_type(self, club_type: str):
-    # Kulüpleri türüne göre (SportClub, MusicClub, ScienceClub) filtreler
-    t = (club_type or "").strip()
-    if not t:
-        return []
-    out = []
-    for c in self.list_all():
-        try:
-            if c.club_type() == t:
-                out.append(c)
-        except Exception:
-            continue
-    return out
-
-
-def _im_club_filter_by_min_members(self, min_members: int):
-    # Üye sayısı verilen değerden büyük veya eşit olan kulüpleri döndürür
-    if not isinstance(min_members, int) or min_members < 0:
-        return []
-    return [c for c in self.list_all() if getattr(c, "member_count", 0) >= min_members]
-
-
-# Metotları sınıfa ekle 
-InMemoryClubRepository.get_by_id = _im_club_get_by_id
-InMemoryClubRepository.filter_by_type = _im_club_filter_by_type
-InMemoryClubRepository.filter_by_min_members = _im_club_filter_by_min_members
-
-
-def _im_event_list_by_date_range(self, start: datetime, end: datetime):
-    # Etkinlikleri verilen başlangıç ve bitiş tarihine göre filtreler
-    if not isinstance(start, datetime) or not isinstance(end, datetime):
-        return []
-    out = []
-    for e in self.list_all():
-        d = getattr(e, "date", None)
-        if isinstance(d, datetime) and start <= d <= end:
-            out.append(e)
-    return out
-
-
-def _im_event_list_by_type(self, event_type: str):
-    # Etkinlikleri event_type alanına göre filtreler
-    t = (event_type or "").strip().lower()
-    if not t:
-        return []
-    out = []
-    for e in self.list_all():
-        et = str(getattr(e, "event_type", "")).strip().lower()
-        if et == t:
-            out.append(e)
-    return out
-
-
-def _im_event_remove_by_id(self, event_id: int) -> bool:
-   # Event ID’ye göre etkinliği listeden siler
-    if not isinstance(event_id, int):
-        return False
-    for i, e in enumerate(list(self._events)):
-        if getattr(e, "event_id", None) == event_id:
-            self._events.pop(i)
-            return True
-    return False
-
-
-InMemoryEventRepository.list_by_date_range = _im_event_list_by_date_range
-InMemoryEventRepository.list_by_type = _im_event_list_by_type
-InMemoryEventRepository.remove_by_id = _im_event_remove_by_id
-
-
-def _file_club_get_by_id(self, club_id: int, factory: Any):
-   # Dosyadaki kayıt sırasını ID kabul ederek kulübü ID ile döndürür
-    if not isinstance(club_id, int) or club_id <= 0:
-        return None
-    all_dicts = self._read_all_dicts()
-    idx = club_id - 1
-    if 0 <= idx < len(all_dicts):
-        return self._dict_to_club(all_dicts[idx], factory)
-    return None
-
-
-def _file_club_filter_by_type(self, club_type: str, factory: Any):
-    # Dosyadaki kulüpleri türüne göre filtreleyip döndürür
-    t = (club_type or "").strip()
-    if not t:
-        return []
-    out = []
-    for c in self.list_all(factory=factory):
-        try:
-            if c.club_type() == t:
-                out.append(c)
-        except Exception:
-            continue
-    return out
-
-
-def _file_club_filter_by_min_members(self, min_members: int, factory: Any):
-    # Dosyadaki kulüpleri minimum üye sayısına göre filtreler
-    if not isinstance(min_members, int) or min_members < 0:
-        return []
-    return [c for c in self.list_all(factory=factory) if getattr(c, "member_count", 0) >= min_members]
-
-
-FileClubRepository.get_by_id = _file_club_get_by_id
-FileClubRepository.filter_by_type = _file_club_filter_by_type
-FileClubRepository.filter_by_min_members = _file_club_filter_by_min_members
-
-
-def _file_event_list_by_date_range(self, start: datetime, end: datetime, event_class: Any):
-        # Dosyadaki etkinlikleri tarih aralığına göre filtreler
-    if not isinstance(start, datetime) or not isinstance(end, datetime):
-        return []
-    out = []
-    for ev in self.list_all(event_class=event_class):
-        d = getattr(ev, "date", None)
-        if isinstance(d, datetime) and start <= d <= end:
-            out.append(ev)
-    return out
-
-
-def _file_event_list_by_type(self, event_type: str, event_class: Any):
-    # Dosyadaki etkinlikleri türüne göre filtreleyip döndürür
-    t = (event_type or "").strip().lower()
-    if not t:
-        return []
-    out = []
-    for ev in self.list_all(event_class=event_class):
-        et = str(getattr(ev, "event_type", "")).strip().lower()
-        if et == t:
-            out.append(ev)
-    return out
-
-
-def _file_event_remove_by_id(self, event_id: int) -> bool:
-    # Event ID’ye göre etkinliği dosyadan siler
-    if not isinstance(event_id, int):
-        return False
-    items = self._read_all()
-    for i, d in enumerate(list(items)):
-        try:
+    # Event id’ye göre etkinliği siler.
+    def remove_by_id(self, event_id: int) -> bool:
+        if not Club.is_positive_int(event_id):
+            return False
+        items = self._read_all()
+        for i, d in enumerate(list(items)):
             if int(d.get("event_id", 0)) == event_id:
                 items.pop(i)
                 self._write_all(items)
                 return True
-        except Exception:
-            continue
-    return False
+        return False
 
+    # Boş repo üretir.
+    @classmethod
+    def empty(cls) -> "FileEventRepository":
+        return cls()
 
-FileEventRepository.list_by_date_range = _file_event_list_by_date_range
-FileEventRepository.list_by_type = _file_event_list_by_type
-FileEventRepository.remove_by_id = _file_event_remove_by_id
-
-
+    # Dosya var mı kontrol eder.
+    @staticmethod
+    def file_exists(file_path: str) -> bool:
+        return Path(file_path).exists()
