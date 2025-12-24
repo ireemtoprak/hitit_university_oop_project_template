@@ -67,8 +67,8 @@ def _ask_names(prompt: str) -> list[str]:
             print("'İsim Soyisim' girilmeli!", flush=True)
             continue
         return names
-    
-    
+
+
 # Kulüp bilgilerini Türkçe etiketlerle ekrana yazdırır.
 def print_club_info_tr(club: Club) -> None:
     created_date = club.created_at.strftime("%d.%m.%Y")
@@ -90,23 +90,26 @@ TYPE_MAP = {
     "bilim": "ScienceClub",
 }
 
-   
-# Menü seçeneklerini ekrana basar.
-def _print_menu() -> None:
+
+def _print_admin_menu() -> None:
     print("Kulüp / Etkinlik Yönetimi (Etkileşimli Demo)", flush=True)
     print("1) Kulüp oluştur", flush=True)
-    print("2) Kulüpleri listele", flush=True)
-    print("3) Kulüp bilgisi göster", flush=True)
-    print("4) Kulübe üye ekle (isim-soyisim)", flush=True)
-    print("5) Kulüpten üye çıkar (isim-soyisim)", flush=True)
-    print("6) Etkinlik planla", flush=True)
-    print("7) Kulübün etkinliklerini listele", flush=True)
-    print("8) Etkinlikleri türüne göre filtrele", flush=True)
-    print("9) Etkinlikleri tarih aralığına göre filtrele", flush=True)
-    print("10) Kulüp ara", flush=True)
-    print("11) Kulüp filtrele (tür)", flush=True)
-    print("12) Kulüp filtrele (min üye)", flush=True)
-    print("13) Etkinlik iptal et (ID ile)", flush=True)
+    print("2) Kulübe üye ekle (isim-soyisim)", flush=True)
+    print("3) Kulüpten üye çıkar (isim-soyisim)", flush=True)
+    print("4) Etkinlik planla", flush=True)
+    print("5) Etkinlik iptal et (ID ile)", flush=True)
+    print("0) Çıkış", flush=True)
+
+
+def _print_user_menu() -> None:
+    print("Kulüp / Etkinlik Yönetimi (Etkileşimli Demo)", flush=True)
+    print("6) Kulüpleri listele", flush=True)
+    print("7) Kulüp bilgisi göster", flush=True)
+    print("8) Kulübün etkinliklerini listele", flush=True)
+    print("9) Etkinlikleri türüne göre filtrele", flush=True)
+    print("10) Etkinlikleri tarih aralığına göre filtrele", flush=True)
+    print("11) Kulüp ara", flush=True)
+    print("12) Kulüp filtrele (tür)", flush=True)
     print("0) Çıkış", flush=True)
 
 
@@ -117,7 +120,14 @@ def _create_club_interactive() -> Club:
     print("1) Spor Kulübü", flush=True)
     print("2) Müzik Kulübü", flush=True)
     print("3) Bilim Kulübü", flush=True)
-    t = _ask_int("Seçim: ", 1)
+
+
+    while True:
+        t = _ask_int("Seçim: ", 1)
+        if t in {1, 2, 3}:
+            break
+        print("Geçersiz seçim. 1, 2 veya 3 gir.", flush=True)
+
 
     name = _ask_text("Kulüp adı: ")
     desc = _ask_text("Açıklama: ")
@@ -166,7 +176,10 @@ def _print_club_list(clubs: list[Club], member_names: dict[str, list[str]]) -> N
         return
     for c in clubs:
         names = member_names.get(c.name, [])
-        print(f"- ID={c.id} | Kulüp adı={c.name} | Tür={c.club_type()} | Üye sayısı={c.member_count} | Kayıtlı üye={len(names)}", flush=True)
+        print(
+            f"- ID={c.id} | Kulüp adı={c.name} | Tür={c.club_type()} | Üye sayısı={c.member_count} | Kayıtlı üye={len(names)}",
+            flush=True,
+        )
 
 
 # Etkinlikleri satır satır özet olarak basar.
@@ -175,7 +188,10 @@ def _print_event_list(events: list[ClubEvent]) -> None:
         print("Etkinlik yok.", flush=True)
         return
     for e in events:
-        print(f"- ID={e.event_id} | {e.title} | {e.date.strftime('%d.%m.%Y')} | {e.location} | Tür={e.event_type} | Kontenjan={e.quota}", flush=True)
+        print(
+            f"- ID={e.event_id} | {e.title} | {e.date.strftime('%d.%m.%Y')} | {e.location} | Tür={e.event_type} | Kontenjan={e.quota}",
+            flush=True,
+        )
 
 
 # Tarih filtresi için başlangıç ve bitiş tarihini gün cinsinden alır.
@@ -203,20 +219,75 @@ def main() -> None:
     _sep()
     print("Demo hazır!", flush=True)
 
+    rol = ""
+    while rol not in {"1", "2"}:
+        _sep()
+        print("1) Yönetici", flush=True)
+        print("2) Kullanıcı", flush=True)
+        print("0) Çıkış", flush=True)
+        rol = input("\nSeçim: ").strip()
+        if rol == "0":
+            _sep()
+            print("Çıkış yapıldı.", flush=True)
+            return
+
     while True:
         _sep()
-        _print_menu()
+        print(f"Rol: {'Yönetici' if rol == '1' else 'Öğrenci'}", flush=True)
+        if rol == "1":
+            _print_admin_menu()
+        else:
+            _print_user_menu()
+
         secim = input("\nSeçim: ").strip()
+
+        # Çıkış öncelikli
+        if secim == "0":
+            _sep()
+            print("Çıkış yapıldı.", flush=True)
+            break
+
+        if secim.lower() in {"gec", "degistir"}:
+            rol = "2" if rol == "1" else "1"
+            continue
 
         if secim == "":
             print("Seçim yapmadın. 0-13 arası bir sayı gir.", flush=True)
             _pause()
             continue
 
-        if secim == "0":
-            _sep()
-            print("Çıkış yapıldı.", flush=True)
-            break
+        # Menüde görünen numarayı, iç mantıktaki eski numaraya çevir
+        ADMIN_MAP = {
+            "1": "1",   # Kulüp oluştur
+            "2": "4",   # Üye ekle
+            "3": "5",   # Üye çıkar
+            "4": "6",   # Etkinlik planla
+            "5": "13",  # Etkinlik iptal
+        }
+
+        USER_MAP = {
+            "6": "2",    # Kulüpleri listele
+            "7": "3",    # Kulüp bilgisi
+            "8": "7",    # Kulüp etkinlikleri
+            "9": "8",    # Etkinlik tür filtresi
+            "10": "9",   # Tarih filtresi
+            "11": "10",  # Kulüp ara
+            "12": "11",  # Kulüp filtrele (tür)
+        }
+
+        # Önce "görünen menü numarasını" ilgili map ile doğrula
+        if rol == "1":
+            if secim not in ADMIN_MAP:
+                print("Bu seçenek bu rolde kullanılamaz.", flush=True)
+                _pause()
+                continue
+            secim = ADMIN_MAP[secim]
+        else:
+            if secim not in USER_MAP:
+                print("Bu seçenek bu rolde kullanılamaz.", flush=True)
+                _pause()
+                continue
+            secim = USER_MAP[secim]
 
         if secim == "1":
             try:
@@ -224,10 +295,10 @@ def main() -> None:
                 saved = service.create_club(club)
                 member_names.setdefault(saved.name, [])
                 _sep()
-                print(f"✅ Kulüp oluşturuldu: {saved.name} (ID={saved.id})", flush=True)
+                print(f"Kulüp oluşturuldu: {saved.name} (ID={saved.id})", flush=True)
             except Exception as e:
                 _sep()
-                print(f"❌ Hata: {e}", flush=True)
+                print(f"Hata: {e}", flush=True)
             _pause()
             continue
 
@@ -242,9 +313,9 @@ def main() -> None:
             club = club_repo.get_by_name(name)
             _sep()
             if club is None:
-                print("❌ Kulüp bulunamadı.", flush=True)
+                print("Kulüp bulunamadı.", flush=True)
             else:
-                print("✅ Kulüp bilgisi:", flush=True)
+                print("Kulüp bilgisi:", flush=True)
                 print_club_info_tr(club)
                 if member_names.get(club.name):
                     print("\nÜyeler:", flush=True)
@@ -258,7 +329,7 @@ def main() -> None:
             club = club_repo.get_by_name(name)
             if club is None:
                 _sep()
-                print("❌ Kulüp bulunamadı.", flush=True)
+                print("Kulüp bulunamadı.", flush=True)
                 _pause()
                 continue
 
@@ -267,12 +338,15 @@ def main() -> None:
 
             _sep()
             if not ok:
-                print("❌ Üye eklenemedi.", flush=True)
+                print("Üye eklenemedi.", flush=True)
             else:
                 member_names.setdefault(club.name, [])
                 member_names[club.name].extend([n for n in names if n not in member_names[club.name]])
                 updated = club_repo.get_by_name(club.name)
-                print(f"✅ {len(names)} üye eklendi. Güncel üye sayısı: {updated.member_count if updated else '?'}", flush=True)
+                print(
+                    f"{len(names)} üye eklendi. Güncel üye sayısı: {updated.member_count if updated else '?'}",
+                    flush=True,
+                )
             _pause()
             continue
 
@@ -281,13 +355,13 @@ def main() -> None:
             club = club_repo.get_by_name(name)
             if club is None:
                 _sep()
-                print("❌ Kulüp bulunamadı.", flush=True)
+                print("Kulüp bulunamadı.", flush=True)
                 _pause()
                 continue
 
             if not member_names.get(club.name):
                 _sep()
-                print("ℹ️  Bu kulüpte üye listesi boş. Önce 4 ile ekle.", flush=True)
+                print("Bu kulüpte üye listesi boş. Önce 4 ile ekle.", flush=True)
                 _pause()
                 continue
 
@@ -297,7 +371,7 @@ def main() -> None:
 
             if not to_remove:
                 _sep()
-                print("ℹ️  Bu isimler listede yok, çıkarma yapılmadı.", flush=True)
+                print("Bu isimler listede yok, çıkarma yapılmadı.", flush=True)
                 _pause()
                 continue
 
@@ -305,11 +379,14 @@ def main() -> None:
 
             _sep()
             if not ok:
-                print("❌ Üye çıkarılamadı.", flush=True)
+                print("Üye çıkarılamadı.", flush=True)
             else:
                 member_names[club.name] = [n for n in current if n not in to_remove]
                 updated = club_repo.get_by_name(club.name)
-                print(f"✅ {len(to_remove)} üye çıkarıldı. Güncel üye sayısı: {updated.member_count if updated else '?'}", flush=True)
+                print(
+                    f"{len(to_remove)} üye çıkarıldı. Güncel üye sayısı: {updated.member_count if updated else '?'}",
+                    flush=True,
+                )
             _pause()
             continue
 
@@ -318,7 +395,7 @@ def main() -> None:
             club = club_repo.get_by_name(name)
             if club is None or club.id is None:
                 _sep()
-                print("❌ Kulüp bulunamadı.", flush=True)
+                print("Kulüp bulunamadı.", flush=True)
                 _pause()
                 continue
 
@@ -327,10 +404,13 @@ def main() -> None:
 
             _sep()
             if planned is None:
-                print("❌ Etkinlik planlanamadı (tarih/kapasite/kulüp kontrolü).", flush=True)
+                print("Etkinlik planlanamadı (tarih/kapasite/kulüp kontrolü).", flush=True)
             else:
-                print(f"✅ Etkinlik eklendi: ID={planned.event_id}", flush=True)
-                print(f"{planned.title} | {planned.date.strftime('%d.%m.%Y')} | {planned.location} | Etkinlik türü={planned.event_type}", flush=True)
+                print(f"Etkinlik eklendi: ID={planned.event_id}", flush=True)
+                print(
+                    f"{planned.title} | {planned.date.strftime('%d.%m.%Y')} | {planned.location} | Etkinlik türü: {planned.event_type}",
+                    flush=True,
+                )
             _pause()
             continue
 
@@ -339,9 +419,9 @@ def main() -> None:
             events = service.list_events_of_club(name)
             _sep()
             if not events:
-                print("❌ Etkinlik bulunamadı.", flush=True)
+                print("Etkinlik bulunamadı.", flush=True)
             else:
-                print("✅ Etkinlik listesi:", flush=True)
+                print("Etkinlik listesi:", flush=True)
                 _print_event_list(events)
             _pause()
             continue
@@ -351,9 +431,9 @@ def main() -> None:
             events = service.filter_events_by_type(t)
             _sep()
             if not events:
-                print(f"❌ Tür filtresi sonucu bulunamadı: {t}", flush=True)
+                print(f"Tür filtresi sonucu bulunamadı: {t}", flush=True)
             else:
-                print(f"✅ Tür filtresi sonucu: {t}", flush=True)
+                print(f"Tür filtresi sonucu: {t}", flush=True)
                 _print_event_list(events)
             _pause()
             continue
@@ -363,20 +443,21 @@ def main() -> None:
             events = service.filter_events_by_date_range(start, end)
             _sep()
             if not events:
-                print("❌ Bu tarih aralığında etkinlik bulunamadı.", flush=True)
+                print("Bu tarih aralığında etkinlik bulunamadı.", flush=True)
             else:
-                print(f"✅ Aralık: {start.strftime('%d.%m.%Y')} -> {end.strftime('%d.%m.%Y')}", flush=True)
+                print(f"Aralık: {start.strftime('%d.%m.%Y')} -> {end.strftime('%d.%m.%Y')}", flush=True)
                 _print_event_list(events)
             _pause()
             continue
+
         if secim == "10":
             k = _ask_text("Arama kelimesi: ")
             res = service.search_clubs(k)
             _sep()
             if not res:
-                print(f"❌ Arama sonucu bulunamadı: {k}", flush=True)
+                print(f"Arama sonucu bulunamadı: {k}", flush=True)
             else:
-                print(f"✅ Arama sonucu: {k}", flush=True)
+                print(f"Arama sonucu: {k}", flush=True)
                 _print_club_list(res, member_names)
             _pause()
             continue
@@ -386,30 +467,18 @@ def main() -> None:
             t = TYPE_MAP.get(t_input)
 
             _sep()
-        if t is None:
-            print("❌ Geçersiz tür. Örnek: Spor Kulübü / Müzik Kulübü / Bilim Kulübü", flush=True)
-            _pause()
-            continue
+            if t is None:
+                print("Geçersiz tür. Örnek: Spor Kulübü / Müzik Kulübü / Bilim Kulübü", flush=True)
+                _pause()
+                continue
 
-        res = service.filter_clubs_by_type(t)
-        if not res:
-            print(f"❌ Bu türde kulüp bulunamadı: {t_input}", flush=True)
-        else:
-            print(f"✅ Tür filtresi: {t_input}", flush=True)
-            _print_club_list(res, member_names)
-            _pause()
-            continue
-
-
-        if secim == "12":
-            m = _ask_int("Minimum üye sayısı: ", 0)
-            res = service.filter_clubs_by_min_members(m)
-            _sep()
+            res = service.filter_clubs_by_type(t)
             if not res:
-                print(f"❌ Min üye filtresi sonucu bulunamadı: {m}", flush=True)
+                print(f"Bu türde kulüp bulunamadı: {t_input}", flush=True)
             else:
-                print(f"✅ Min üye filtresi: {m}", flush=True)
+                print(f"Tür filtresi: {t_input}", flush=True)
                 _print_club_list(res, member_names)
+
             _pause()
             continue
 
@@ -417,14 +486,13 @@ def main() -> None:
             event_id = _ask_int("İptal edilecek etkinlik ID: ", 1)
             ok = service.cancel_event(event_id)
             _sep()
-            print("✅ Etkinlik iptal edildi." if ok else "❌ Etkinlik bulunamadı.", flush=True)
+            print("Etkinlik iptal edildi." if ok else "Etkinlik bulunamadı.", flush=True)
             _pause()
             continue
 
         _sep()
         print("Geçersiz seçim. 0-13 arası bir sayı gir.", flush=True)
         _pause()
-
 
 
 # Dosya direkt çalıştırılırsa menüyü açar.
